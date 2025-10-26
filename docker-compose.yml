@@ -25,7 +25,7 @@ services:
   # Backend API (NestJS)
   backend:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     container_name: wb-ab-backend
     restart: unless-stopped
@@ -48,14 +48,15 @@ services:
   # Frontend (Next.js)
   frontend:
     build:
-      context: ./frontend
+      context: ../frontend
       dockerfile: Dockerfile
     container_name: wb-ab-frontend
     restart: unless-stopped
     environment:
       - NEXT_PUBLIC_API_URL=http://backend:3001/api
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - wb-ab-network
 
@@ -68,10 +69,12 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ../nginx/conf.d:/etc/nginx/conf.d
     depends_on:
-      - frontend
-      - backend
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
     networks:
       - wb-ab-network
 
