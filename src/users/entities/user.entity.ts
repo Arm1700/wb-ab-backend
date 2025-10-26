@@ -1,6 +1,6 @@
-import { User as PrismaUser, UserRole } from '@prisma/client';
+import { UserRole } from '../../common/types/user-role';
 
-export class User implements PrismaUser {
+export class User {
   id: string;
   email: string;
   password: string;
