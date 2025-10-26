@@ -9,7 +9,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  extensions = [pg_trgm, pgcrypto, uuid_ossp]
+  extensions = [pg_trgm, pgcrypto]
 }
 
 // Example model - replace with your actual models
@@ -19,7 +19,7 @@ enum UserRole {
 }
 
 model User {
-  id        String   @id @default(uuid())
+  id        String   @id @default(dbgenerated("gen_random_uuid()"))
   email     String   @unique
   password  String
   role      UserRole @default(USER)
@@ -31,7 +31,7 @@ model User {
 }
 
 model RefreshToken {
-  id          String   @id @default(uuid())
+  id          String   @id @default(dbgenerated("gen_random_uuid()"))
   token       String   @unique
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
