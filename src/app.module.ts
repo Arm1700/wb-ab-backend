@@ -1,32 +1,42 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerBehindProxyGuard } from './common/guards/throttler-behind-proxy.guard';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { DatabaseConfig } from './config/database.config';
+import { CoreModule } from './core/core.module';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
-    // Configuration module
-    ConfigModule.forRoot({
-      isGlobal: true,
-      envFilePath: '.env',
-    }),
-
-    // Database module
-    TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      useClass: DatabaseConfig,
-      inject: [ConfigService],
+    // Core modules (Config, Prisma, etc.)
+    CoreModule,
+    
+    // Rate limiting
+    ThrottlerModule.forRoot({
+      throttlers: [{
+        ttl: 60 * 1000, // 1 minute in milliseconds
+        limit: 100, // 100 requests per minute
+      }],
     }),
 
     // Schedule module for cron jobs
     ScheduleModule.forRoot(),
 
-    // Feature modules will be added here
+    // Feature modules
+    AuthModule,
+    UsersModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerBehindProxyGuard,
+    },
+  ],
 })
 export class AppModule {}

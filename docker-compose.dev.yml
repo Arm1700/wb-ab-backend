@@ -1,10 +1,9 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
-    container_name: wb-ab-postgres
+    container_name: wb-ab-postgres-dev
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -13,7 +12,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data_dev:/var/lib/postgresql/data
     networks:
       - wb-ab-network
     healthcheck:
@@ -22,51 +21,55 @@ services:
       timeout: 5s
       retries: 5
 
-  # Backend API (NestJS)
   backend:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: wb-ab-backend
+      dockerfile: Dockerfile.dev
+    container_name: wb-ab-backend-dev
     restart: unless-stopped
     ports:
       - "3001:3001"
     environment:
-      - NODE_ENV=production
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USERNAME=postgres
-      - DB_PASSWORD=postgres
-      - DB_DATABASE=wb_ab_testing
-      - PORT=3001
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/wb_ab_testing?schema=public
+      NODE_ENV: development
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_DATABASE: wb_ab_testing
+      PORT: 3001
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/wb_ab_testing?schema=public
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - wb-ab-network
-    command: ["sh", "-c", "npx prisma migrate deploy && node dist/main"]
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    command: ["sh", "-c", "npx prisma generate && npm run start:dev"]
 
-  # Frontend (Next.js)
   frontend:
     build:
       context: ../wb-ab-frontend
-      dockerfile: Dockerfile
-    container_name: wb-ab-frontend
+      dockerfile: Dockerfile.dev
+    container_name: wb-ab-frontend-dev
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:3001/api
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api
     depends_on:
       - backend
     networks:
       - wb-ab-network
-    # No volumes in production; image contains the build
+    volumes:
+      - ../wb-ab-frontend:/usr/src/app
+      - /usr/src/app/node_modules
+    command: ["npm", "run", "dev"]
 
 networks:
   wb-ab-network:
     driver: bridge
 
 volumes:
-  postgres_data:
+  postgres_data_dev:

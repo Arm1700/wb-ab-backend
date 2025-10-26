@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, VersioningType } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -28,17 +29,48 @@ async function bootstrap() {
     optionsSuccessStatus: 204,
   });
 
+  // Trust proxy for rate limiting
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
+  // Enable API versioning
+  app.enableVersioning({
+    type: VersioningType.URI,
+    defaultVersion: '1',
+  });
+
   // Enable validation pipe globally
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       transform: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
       forbidNonWhitelisted: true,
     }),
   );
 
   // Set global prefix for all routes
   app.setGlobalPrefix('api');
+
+  // Throttler guard is registered globally via APP_GUARD in AppModule
+
+  // Swagger configuration
+  const config = new DocumentBuilder()
+    .setTitle('Wildberries A/B Testing API')
+    .setDescription('API documentation for Wildberries A/B Testing Service')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .build();
+  
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/docs', app, document, {
+    swaggerOptions: {
+      persistAuthorization: true,
+      tagsSorter: 'alpha',
+      operationsSorter: 'method',
+    },
+  });
 
   const port = process.env.PORT || 3001;
   await app.listen(port);
