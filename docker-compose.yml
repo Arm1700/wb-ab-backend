@@ -48,7 +48,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    command: ["sh", "-c", "npx prisma migrate deploy && node dist/main"]
+    command: ["sh", "-c", "npx prisma generate && npx prisma migrate deploy && node dist/main"]
+
 
   # Frontend (Next.js)
   frontend:
