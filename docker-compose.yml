@@ -25,7 +25,7 @@ services:
   # Backend API (NestJS)
   backend:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     container_name: wb-ab-backend
     restart: unless-stopped
@@ -53,7 +53,7 @@ services:
   # Frontend (Next.js)
   frontend:
     build:
-      context: ./frontend
+      context: ../frontend
       dockerfile: Dockerfile
     container_name: wb-ab-frontend
     restart: unless-stopped
