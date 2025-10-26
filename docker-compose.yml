@@ -73,10 +73,8 @@ services:
     networks:
       - wb-ab-network
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      disable: true
+
     command: >
       sh -c "
       until pg_isready -h postgres -p 5432 -U postgres; do
