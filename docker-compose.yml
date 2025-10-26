@@ -44,7 +44,10 @@ services:
     networks:
       - wb-ab-network
     healthcheck:
-      disable: true
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     command: >
       sh -c "
         echo '⏳ Waiting for PostgreSQL...' &&
