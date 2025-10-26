@@ -48,8 +48,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    command: ["sh", "-c", "npx prisma generate && npx prisma migrate deploy && node dist/main"]
-
+    command: >
+      sh -c "
+        echo '⏳ Waiting for PostgreSQL...' &&
+        sleep 8 &&
+        npx prisma generate &&
+        npx prisma migrate deploy &&
+        echo '🚀 Starting backend...' &&
+        node dist/main
+      "
 
   # Frontend (Next.js)
   frontend:
@@ -70,6 +77,20 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    command: >
+      sh -c "
+      until pg_isready -h postgres -p 5432 -U postgres; do
+        echo 'Waiting for Postgres...';
+        sleep 2;
+      done
+      &&
+      npx prisma generate
+      &&
+      npx prisma migrate deploy
+      &&
+      node dist/main
+      "
+
 
   # NGINX reverse proxy
   nginx:
