@@ -25,12 +25,10 @@ services:
   # Backend API (NestJS)
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     container_name: wb-ab-backend
     restart: unless-stopped
-    ports:
-      - "3001:3001"
     environment:
       - NODE_ENV=production
       - DB_HOST=postgres
@@ -50,19 +48,32 @@ services:
   # Frontend (Next.js)
   frontend:
     build:
-      context: ../wb-ab-frontend
+      context: ./frontend
       dockerfile: Dockerfile
     container_name: wb-ab-frontend
     restart: unless-stopped
-    ports:
-      - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://backend:3001/api
     depends_on:
       - backend
     networks:
       - wb-ab-network
-    # No volumes in production; image contains the build
+
+  # NGINX reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: wb-ab-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - wb-ab-network
 
 networks:
   wb-ab-network:
