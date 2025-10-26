@@ -79,7 +79,8 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ../nginx/conf.d:/etc/nginx/conf.d
+
     networks:
       - wb-ab-network
 
