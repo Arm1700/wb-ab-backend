@@ -44,10 +44,7 @@ services:
     networks:
       - wb-ab-network
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider --quiet http://localhost:3001/api/health || exit 1"]
-      interval: 5s
-      timeout: 2s
-      retries: 5
+      disable: true
     command: >
       sh -c "
         echo '⏳ Waiting for PostgreSQL...' &&
@@ -73,8 +70,10 @@ services:
     networks:
       - wb-ab-network
     healthcheck:
-      disable: true
-
+      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     command: >
       sh -c "
       until pg_isready -h postgres -p 5432 -U postgres; do
