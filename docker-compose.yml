@@ -35,10 +35,10 @@ services:
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_USERNAME=postgres
-      - DB_PASSWORD=xN%3FF%29pq7%7Ea%3BSThDISgj%24
+      - DB_PASSWORD=postgres
       - DB_DATABASE=wb_ab_db
       - PORT=3001
-      - DATABASE_URL=postgresql://postgres:xN%3FF%29pq7%7Ea%3BSThDISgj%24@postgres:5432/wb_ab_db?schema=public
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/wb_ab_db?schema=public
     depends_on:
       postgres:
         condition: service_healthy
