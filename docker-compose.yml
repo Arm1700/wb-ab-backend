@@ -8,7 +8,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: xN%3FF%29pq7%7Ea%3BSThDISgj%24
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: wb_ab_db
     ports:
       - "5432:5432"
@@ -21,7 +21,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
 
   # Backend API (NestJS)
   backend:
