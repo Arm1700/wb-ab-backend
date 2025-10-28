@@ -32,11 +32,6 @@ async function bootstrap() {
   // Trust proxy for rate limiting
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
 
-  // Enable API versioning
-  app.enableVersioning({
-    type: VersioningType.URI,
-    defaultVersion: '1',
-  });
 
   // Enable validation pipe globally
   app.useGlobalPipes(

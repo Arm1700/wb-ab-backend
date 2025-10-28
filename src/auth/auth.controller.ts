@@ -7,11 +7,21 @@ import { Tokens } from './interfaces/tokens.interface';
 import { GetCurrentUserId } from './decorators/get-current-user-id.decorator';
 import { GetCurrentUser } from './decorators/get-current-user.decorator';
 import { Public } from './decorators/public.decorator';
+import { RegisterDto } from './dto/register.dto';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Public()
+  @Post('register')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'User register' })
+  @ApiResponse({ status: 201, description: 'User registered successfully' })
+  async register(@Body() dto: RegisterDto): Promise<Tokens> {
+    return this.authService.register(dto);
+  }
 
   @Public()
   @Post('login')
