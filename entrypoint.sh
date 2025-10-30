@@ -1,11 +1,18 @@
 #!/bin/sh
 set -e
 
-echo "Running Prisma migrations..."
-npx prisma migrate deploy
+echo "⏳ Waiting for PostgreSQL..."
+# можно добавить проверку подключения к БД, чтобы не стартовать раньше
+until nc -z $DB_HOST $DB_PORT; do
+  echo "Postgres is unavailable - sleeping"
+  sleep 2
+done
 
-echo "Generating Prisma client..."
+echo "Running Prisma generate..."
 npx prisma generate
 
-echo "Starting NestJS app..."
+echo "Running Prisma migrate deploy..."
+npx prisma migrate deploy
+
+echo "🚀 Starting NestJS app..."
 exec node dist/main
