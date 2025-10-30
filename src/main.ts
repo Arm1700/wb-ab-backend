@@ -9,7 +9,8 @@ async function bootstrap() {
   // Enable CORS
   const allowedOrigins = [
     process.env.FRONTEND_URL || 'http://localhost:3000',
-    'http://84.247.184.155', // Добавляем внешний IP
+    'http://wb-ab-frontend:3000',
+    'http://84.247.184.155',
   ];
 
   app.enableCors({
