@@ -1,5 +1,5 @@
 84.247.184.155 {
-    auto_https off
+	tls internal
 
     # Backend API (NestJS)
     handle_path /api/* {
