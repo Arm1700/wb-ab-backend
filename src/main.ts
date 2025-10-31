@@ -13,7 +13,6 @@ async function bootstrap() {
   // Enable CORS
   const allowedOrigins = [
     process.env.FRONTEND_URL || 'http://localhost:3000',
-    'http://wb-ab-frontend:3000',
     'http://84.247.184.155',
     'http://84.247.184.155:3000',
   ];

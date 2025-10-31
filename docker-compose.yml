@@ -4,7 +4,6 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:16
-    container_name: wb-ab-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -22,7 +21,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: wb-ab-backend
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -40,30 +38,31 @@ services:
     ports:
       - "3001:3001"
 
-    
   # Frontend (Next.js)
   frontend:
     build:
       context: ../frontend
       dockerfile: Dockerfile
-    container_name: wb-ab-frontend
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: http://wb-ab-backend:3001/api
+      NEXT_PUBLIC_API_URL: http://backend:3001/api
     networks:
       - wb-ab-network
+    ports:
+      - "3000:3000"
 
-  # NGINX reverse proxy
-  nginx:
-    image: nginx:alpine
-    container_name: wb-ab-nginx
+  # Caddy reverse proxy
+  caddy:
+    image: caddy:2-alpine
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - /opt/wb-project/nginx/conf.d:/etc/nginx/conf.d
-
+      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - frontend
+      - backend
     networks:
       - wb-ab-network
 

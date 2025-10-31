@@ -1,0 +1,17 @@
+84.247.184.155 {
+    # Backend API (NestJS)
+    handle_path /api/* {
+        reverse_proxy backend:3001
+    }
+
+    # Next.js static assets with cache control
+    handle_path /_next/static/* {
+        header Cache-Control "no-cache, must-revalidate"
+        reverse_proxy frontend:3000
+    }
+
+    # Frontend (Next.js)
+    handle {
+        reverse_proxy frontend:3000
+    }
+}
