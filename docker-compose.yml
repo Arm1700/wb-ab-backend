@@ -49,7 +49,7 @@ services:
     container_name: wb-ab-frontend
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: http://backend:3001/api
+      NEXT_PUBLIC_API_URL: http://wb-ab-backend:3001/api
     networks:
       - wb-ab-network
 
