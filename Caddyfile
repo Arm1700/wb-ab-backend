@@ -1,18 +1,18 @@
-84.247.184.155 {
-	tls internal
-
-    # Backend API (NestJS)
+84.247.184.155:80 {
+    # Отключаем TLS полностью, только HTTP
+    # tls internal можно убрать для HTTP
+    # Обработка API
     handle_path /api/* {
         reverse_proxy localhost:3001
     }
 
-    # Next.js static assets
+    # Статика Next.js
     handle_path /_next/static/* {
         header Cache-Control "no-cache, must-revalidate"
         reverse_proxy localhost:3000
     }
 
-    # Frontend (Next.js)
+    # Фронтенд
     handle {
         reverse_proxy localhost:3000
     }
