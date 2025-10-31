@@ -59,7 +59,6 @@ services:
     - CADDY_AUTOHTTPS=false   # отключаем авто HTTPS
     ports:
       - "80:80"
-      - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:

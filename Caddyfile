@@ -1,14 +1,12 @@
 http://84.247.184.155 {
     handle_path /api/* {
-        reverse_proxy localhost:3001
+        reverse_proxy backend:3001
     }
-
     handle_path /_next/static/* {
         header Cache-Control "no-cache, must-revalidate"
-        reverse_proxy localhost:3000
+        reverse_proxy frontend:3000
     }
-
     handle {
-        reverse_proxy localhost:3000
+        reverse_proxy frontend:3000
     }
 }
