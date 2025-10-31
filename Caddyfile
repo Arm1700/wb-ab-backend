@@ -1,5 +1,0 @@
-84.247.184.155 {
-    tls internal
-    reverse_proxy backend:3001
-    reverse_proxy /_next/* frontend:3000
-}
