@@ -12,9 +12,11 @@ async function bootstrap() {
 
   // Enable CORS
   const allowedOrigins = [
-    process.env.FRONTEND_URL || 'http://localhost:3000',
     'http://84.247.184.155',
     'http://84.247.184.155:3000',
+    'https://84.247.184.155',
+    'https://84.247.184.155:3000',
+    'http://localhost:3000'
   ];
 
   app.enableCors({
