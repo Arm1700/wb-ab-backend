@@ -59,7 +59,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:
       - frontend
       - backend
