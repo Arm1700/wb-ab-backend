@@ -16,6 +16,9 @@ export default () => ({
   wb: {
     apiKey: process.env.WB_API_KEY,
     baseUrl: process.env.WB_BASE_URL || 'https://suppliers-api.wildberries.ru',
+    advertBaseUrl: process.env.WB_ADVERT_BASE_URL || 'https://advert-api-sandbox.wildberries.ru',
+    contentBaseUrl: process.env.WB_CONTENT_BASE_URL || 'https://content-api-sandbox.wildberries.ru',
+    analyticsBaseUrl: process.env.WB_ANALYTICS_BASE_URL || 'https://analytics-api-sandbox.wildberries.ru',
   },
   yookassa: {
     shopId: process.env.YOOKASSA_SHOP_ID,

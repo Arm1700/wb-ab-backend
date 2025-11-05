@@ -4,6 +4,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
 import { UserRole } from '../common/types/user-role';
+import { encrypt, decrypt, isKeyConfigured } from '../common/utils/crypto.util';
 
 @Injectable()
 export class UsersService {
@@ -100,5 +101,35 @@ export class UsersService {
     }
 
     return this.findById(userId);
+  }
+
+  async setWbApiToken(userId: string, token: string): Promise<void> {
+    const toStore = ((): string => {
+      if (isKeyConfigured()) {
+        try { return encrypt(token); } catch { /* ignore and store plain */ }
+      }
+      return token;
+    })();
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        wbApiToken: toStore,
+        wbApiTokenUpdatedAt: new Date(),
+      },
+    });
+  }
+
+  async getWbApiToken(userId: string): Promise<string | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { wbApiToken: true },
+    });
+    if (!user?.wbApiToken) return null;
+    const stored = user.wbApiToken;
+    if (isKeyConfigured()) {
+      try { return decrypt(stored); } catch { /* stored may be plain, fall through */ }
+    }
+    return stored;
   }
 }

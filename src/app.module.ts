@@ -9,6 +9,11 @@ import { AppService } from './app.service';
 import { CoreModule } from './core/core.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { WbModule } from './wb/wb.module';
+import { AbTestsModule } from './abtests/abtests.module';
+import { QueuesModule } from './queues/queues.module';
+import { ProductsModule } from './products/products.module';
+import { SeedModule } from './seed/seed.module';
 
 @Module({
   imports: [
@@ -29,6 +34,11 @@ import { UsersModule } from './users/users.module';
     // Feature modules
     AuthModule,
     UsersModule,
+    WbModule,
+    AbTestsModule,
+    QueuesModule,
+    ProductsModule,
+    SeedModule,
   ],
   controllers: [AppController],
   providers: [

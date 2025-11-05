@@ -16,7 +16,8 @@ async function bootstrap() {
     'http://84.247.184.155:3000',
     'https://84.247.184.155',
     'https://84.247.184.155:3000',
-    'http://localhost:3000'
+    'http://localhost:3000',
+    'http://localhost:3001'
   ];
 
   app.enableCors({

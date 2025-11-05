@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "ProductMetric" ADD COLUMN     "buyoutCount" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "buyoutSum" DECIMAL(12,2),
+ADD COLUMN     "cartCount" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "openCount" INTEGER NOT NULL DEFAULT 0;
