@@ -11,21 +11,34 @@ async function bootstrap() {
   app.use(cookieParser());
 
   // Enable CORS
+  const isDevelopment = process.env.NODE_ENV !== 'production';
+  
   const allowedOrigins = [
     'http://84.247.184.155',
     'http://84.247.184.155:3000',
+    'http://84.247.184.155:3001',
     'https://84.247.184.155',
     'https://84.247.184.155:3000',
+    'https://84.247.184.155:3001',
     'http://localhost:3000',
-    'http://localhost:3001'
+    'http://localhost:3001',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001'
   ];
 
   app.enableCors({
     origin: (origin, callback) => {
-      // Разрешаем запросы без origin (например curl, Postman)
+      // В development режиме разрешаем все origins
+      if (isDevelopment) {
+        return callback(null, true);
+      }
+      
+      // В production проверяем whitelist
       if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
+      
+      console.error(`CORS blocked origin: ${origin}`);
       return callback(new Error(`Not allowed by CORS: ${origin}`));
     },
     credentials: true,
