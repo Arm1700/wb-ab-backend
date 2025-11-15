@@ -37,8 +37,9 @@ services:
       - postgres
     ports:
       - "3001:3001"
+    volumes:
+      - /opt/wb-project/photos:/app/photos  =
 
-  # Frontend (Next.js)
   frontend:
     build:
       context: ../frontend
