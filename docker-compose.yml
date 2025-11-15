@@ -37,8 +37,8 @@ services:
       - postgres
     ports:
       - "3001:3001"
-  volumes:
-    - ./photos:/app/photos
+    volumes:
+      - ./photos:/app/photos
 
   frontend:
     build:
