@@ -255,9 +255,12 @@ export class WbService {
   }
 
   private async getTokenOrThrow(userId: string): Promise<string> {
-    const token = await this.usersService.getWbApiToken(userId)
-    if (!token) throw new BadRequestException('WB API token is not set for this user')
-    return token
+    // Prefer classic API token, but gracefully fallback to Partner token
+    const apiToken = await this.usersService.getWbApiToken(userId)
+    if (apiToken) return apiToken
+    const partnerToken = await this.usersService.getWbPartnerToken(userId)
+    if (partnerToken) return partnerToken
+    throw new BadRequestException('WB API/Partner token is not set for this user')
   }
 
   private normalizeAuthHeader(rawToken: string): string {

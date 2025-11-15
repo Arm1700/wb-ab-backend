@@ -7,7 +7,7 @@ export class User {
   role: UserRole;
   createdAt: Date;
   updatedAt: Date;
-  wbApiToken?: string | null;
+  wbPartnerToken?: string | null;
 
   constructor(partial: Partial<User>) {
     Object.assign(this, partial);
@@ -15,7 +15,7 @@ export class User {
 
   // Remove sensitive data before sending to client
   toJSON() {
-    const { password, wbApiToken, ...user } = this;
+    const { password, wbPartnerToken, ...user } = this;
     return user;
   }
 }

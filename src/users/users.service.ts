@@ -109,7 +109,7 @@ export class UsersService {
   }
 
   async setWbApiToken(userId: string, token: string): Promise<void> {
-    const toStore = ((): string => {
+    const toStore = (() => {
       if (isKeyConfigured()) {
         try { return encrypt(token); } catch { /* ignore and store plain */ }
       }
@@ -119,8 +119,8 @@ export class UsersService {
     await this.prisma.user.update({
       where: { id: userId },
       data: {
-        wbApiToken: toStore,
-        wbApiTokenUpdatedAt: new Date(),
+        wbPartnerToken: toStore,
+        wbPartnerTokenUpdatedAt: new Date(),
       },
     });
   }
@@ -128,10 +128,10 @@ export class UsersService {
   async getWbApiToken(userId: string): Promise<string | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { wbApiToken: true },
+      select: { wbPartnerToken: true },
     });
-    if (!user?.wbApiToken) return null;
-    const stored = user.wbApiToken;
+    if (!user?.wbPartnerToken) return null;
+    const stored = user.wbPartnerToken;
     if (isKeyConfigured()) {
       try { return decrypt(stored); } catch { /* stored may be plain, fall through */ }
     }
