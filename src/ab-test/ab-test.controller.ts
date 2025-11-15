@@ -11,11 +11,23 @@ import { ABTestService } from './ab-test.service'
 export class ABTestController {
   constructor(private readonly service: ABTestService) {}
 
+  // Ensure photos dir exists at startup; use project-relative path to avoid writing to '/'
+  private static readonly PHOTOS_DIR = (() => {
+    const dir = path.resolve(process.cwd(), 'photos')
+    try {
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    } catch (e) {
+      // If creation fails, keep the previous behavior but will error on upload
+      console.error('[ABTestController] Failed to ensure photos dir', { dir, error: (e as any)?.message })
+    }
+    return dir
+  })()
+
   @Public()
   @Post('start')
   @UseInterceptors(FilesInterceptor('photos', 5, {
     storage: diskStorage({
-      destination: path.resolve(__dirname, '..', '..', 'photos'),
+      destination: ABTestController.PHOTOS_DIR,
       filename: (req, file, cb) => {
         const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg'
         const raw = (path.parse(file.originalname || '').name || 'photo').toLowerCase()
@@ -82,7 +94,7 @@ export class ABTestController {
   @Public()
   @Get('photo/:name')
   photo(@Param('name') name: string, @Res() res: Response) {
-    const dir = path.resolve(__dirname, '..', '..', 'photos')
+    const dir = ABTestController.PHOTOS_DIR
     const clean = decodeURIComponent((name || '').split('?')[0])
     if (!/^[A-Za-z0-9._-]+$/.test(clean)) return res.status(400).send('Invalid name')
     if (!fs.existsSync(path.join(dir, clean))) return res.status(404).send('Not found')
