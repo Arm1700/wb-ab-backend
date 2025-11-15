@@ -6,21 +6,29 @@ import { GetCurrentUserId } from '../auth/decorators/get-current-user-id.decorat
 export class WbController {
   constructor(private readonly wbService: WbService) {}
 
-  @Get('analytics/sales-funnel/products')
-  async getSalesFunnelProducts(
+  @Post('analytics/sales-funnel/products')
+  async postSalesFunnelProducts(
     @GetCurrentUserId() userId: string,
-    @Query('dateFrom') dateFrom?: string,
-    @Query('dateTo') dateTo?: string,
-    @Query('page') page?: string,
-    @Query('pageSize') pageSize?: string,
+    @Body() body: any,
   ) {
-    const result = await this.wbService.getSalesFunnelProducts(userId, {
-      dateFrom,
-      dateTo,
-      page: page ? Number(page) : undefined,
-      pageSize: pageSize ? Number(pageSize) : undefined,
-    })
-    return result
+    return this.wbService.postSalesFunnelProducts(userId, body)
+  }
+
+  @Post('analytics/sales-funnel/products/history')
+  async postSalesFunnelProductsHistory(
+    @GetCurrentUserId() userId: string,
+    @Body() body: any,
+  ) {
+    return this.wbService.postSalesFunnelProductsHistory(userId, body)
+  }
+
+  // Seller Analytics v3 proxy (matches the curl body you provided)
+  @Post('analytics/v3/sales-funnel/products/history')
+  async postSellerAnalyticsV3ProductsHistory(
+    @GetCurrentUserId() userId: string,
+    @Body() body: any,
+  ) {
+    return this.wbService.postSellerAnalyticsV3ProductsHistory(userId, body)
   }
 
   @Get('analytics/traffic/summary')
@@ -62,6 +70,14 @@ export class WbController {
   @Get('content/cards/limits')
   async getContentCardsLimits(@GetCurrentUserId() userId: string) {
     return this.wbService.getContentCardsLimits(userId)
+  }
+
+  @Post('content/cards/list')
+  async postContentCardsList(
+    @GetCurrentUserId() userId: string,
+    @Body() body: any,
+  ) {
+    return this.wbService.postContentCardsList(userId, body)
   }
 
   @Post('content/goods/filter')

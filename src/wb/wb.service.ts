@@ -7,6 +7,8 @@ import { PrismaService } from '../prisma/prisma.service'
 @Injectable()
 export class WbService {
   private analyticsClient: AxiosInstance
+  private sellerAnalyticsClient: AxiosInstance
+  private statisticsClient: AxiosInstance
   private advertClient: AxiosInstance
   private contentClient: AxiosInstance
   private limitsCache: { data: any; ts: number } | null = null
@@ -16,12 +18,163 @@ export class WbService {
     private readonly usersService: UsersService,
     private readonly prisma: PrismaService,
   ) {
-    const analyticsBaseURL = this.configService.get<string>('wb.analyticsBaseUrl') || 'https://analytics-api-sandbox.wildberries.ru'
-    const advertBaseURL = this.configService.get<string>('wb.advertBaseUrl') || 'https://advert-api-sandbox.wildberries.ru'
-    const contentBaseURL = this.configService.get<string>('wb.contentBaseUrl') || 'https://content-api-sandbox.wildberries.ru'
-    this.analyticsClient = axios.create({ baseURL: analyticsBaseURL })
-    this.advertClient = axios.create({ baseURL: advertBaseURL })
-    this.contentClient = axios.create({ baseURL: contentBaseURL })
+    // Plan A: Use Statistics API as the single source of truth
+    this.analyticsClient = axios.create({ baseURL: 'https://statistics-api.wildberries.ru' })
+    this.sellerAnalyticsClient = axios.create({ baseURL: 'https://seller-analytics-api.wildberries.ru' })
+    this.statisticsClient = axios.create({ baseURL: 'https://statistics-api.wildberries.ru' })
+    this.advertClient = axios.create({ baseURL: 'https://advert-api.wildberries.ru' })
+    this.contentClient = axios.create({ baseURL: 'https://content-api.wildberries.ru' })
+  }
+
+  // Seller Analytics v3: proxy products history exactly like the curl you provided
+  async postSellerAnalyticsV3ProductsHistory(userId: string, body: any) {
+    const token = await this.getTokenOrThrow(userId)
+    try {
+      const { data } = await this.sellerAnalyticsClient.post(
+        '/api/analytics/v3/sales-funnel/products/history',
+        body,
+        { headers: { Authorization: token, 'Content-Type': 'application/json' } },
+      )
+      return data
+    } catch (e: any) {
+      const status = e?.response?.status || 502
+      const message = e?.response?.data?.message || e?.message || 'Seller Analytics v3 products history failed'
+      throw new HttpException({ message, details: e?.response?.data }, status)
+    }
+  }
+
+  // --- Analytics rebuilt on top of Statistics API ---
+  // body: { selectedPeriod: {start, end}, nmIds?: number[], ... }
+  async postSalesFunnelProducts(userId: string, body: any) {
+    const token = await this.getTokenOrThrow(userId)
+    const start = body?.selectedPeriod?.start
+    if (!start) throw new HttpException({ message: 'selectedPeriod.start is required' }, 400)
+    // Pull orders and sales for the period. statistics API requires dateFrom; we fetch from start.
+    const params: any = { dateFrom: start, flag: 0 }
+    try {
+      const [ordersRes, salesRes] = await Promise.all([
+        this.statisticsClient.get('/api/v1/supplier/orders', { params, headers: { Authorization: token } }),
+        this.statisticsClient.get('/api/v1/supplier/sales', { params, headers: { Authorization: token } }),
+      ])
+      const orders = Array.isArray(ordersRes.data) ? ordersRes.data : []
+      const sales = Array.isArray(salesRes.data) ? salesRes.data : []
+      const nmFilter: number[] | undefined = Array.isArray(body?.nmIds) ? body.nmIds : undefined
+      const inFilter = (nm: any) => !nmFilter || nmFilter.includes(Number(nm))
+      const byNm = new Map<number, { orders: number; sales: number }>()
+      for (const o of orders) {
+        const nm = Number(o?.nmId ?? o?.nmID ?? o?.nm)
+        if (!Number.isFinite(nm) || !inFilter(nm)) continue
+        const row = byNm.get(nm) || { orders: 0, sales: 0 }
+        row.orders += 1
+        byNm.set(nm, row)
+      }
+      for (const s of sales) {
+        const nm = Number(s?.nmId ?? s?.nmID ?? s?.nm)
+        if (!Number.isFinite(nm) || !inFilter(nm)) continue
+        const row = byNm.get(nm) || { orders: 0, sales: 0 }
+        row.sales += 1
+        byNm.set(nm, row)
+      }
+      const items = Array.from(byNm.entries()).map(([nmId, v]) => ({ nmId, orders: v.orders, sales: v.sales }))
+      return { items, periodStart: start }
+    } catch (e: any) {
+      const status = e?.response?.status || 502
+      const message = e?.response?.data?.message || e?.message || 'Statistics aggregation failed'
+      throw new HttpException({ message, details: e?.response?.data }, status)
+    }
+  }
+
+  // Content: explicit cards list via the legacy endpoint you referenced
+  // POST https://content-api.wildberries.ru/content/v2/get/cards/list
+  async postContentCardsList(userId: string, body: any) {
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    try {
+      // Accept either ready 'settings' shape or wrap a simpler request into it
+      const normalizedBody = (() => {
+        if (body && typeof body === 'object' && body.settings) return body
+        const limit = body?.cursor?.limit ?? body?.sort?.cursor?.limit ?? 100
+        const textSearch = body?.filter?.textSearch ?? ''
+        const withPhoto = body?.filter?.withPhoto ?? -1
+        const updatedAt = body?.sort?.cursor?.updatedAt ?? 'desc'
+        const nmID = body?.sort?.cursor?.nmID ?? 0
+        return {
+          settings: {
+            cursor: { limit },
+            filter: { textSearch, withPhoto },
+            sort: { cursor: { updatedAt, nmID } },
+          },
+        }
+      })()
+
+      const attempt = async () => {
+        const { data } = await this.contentClient.post('/content/v2/get/cards/list', normalizedBody, {
+          headers: { Authorization: token },
+        })
+        return data
+      }
+      const data = await this.retryOn429(attempt)
+      return data
+    } catch (e: any) {
+      const status = e?.response?.status || 502
+      const message = e?.response?.data?.message || e?.message || 'WB Content cards list request failed'
+      throw new HttpException({ message, details: e?.response?.data }, status)
+    }
+  }
+
+  // body: { selectedPeriod: {start, end}, nmIds?: number[], aggregationLevel?: 'day'|'week' }
+  async postSalesFunnelProductsHistory(userId: string, body: any) {
+    const token = await this.getTokenOrThrow(userId)
+    const startStr = body?.selectedPeriod?.start
+    const endStr = body?.selectedPeriod?.end
+    if (!startStr || !endStr) throw new HttpException({ message: 'selectedPeriod.start and end are required' }, 400)
+    const start = new Date(startStr)
+    const end = new Date(endStr)
+    const nmFilter: number[] | undefined = Array.isArray(body?.nmIds) ? body.nmIds : undefined
+    const bucket = (d: Date) => d.toISOString().slice(0, 10)
+    const byNmDate = new Map<string, { orders: number; sales: number }>()
+    try {
+      const params: any = { dateFrom: startStr, flag: 0 }
+      const [ordersRes, salesRes] = await Promise.all([
+        this.statisticsClient.get('/api/v1/supplier/orders', { params, headers: { Authorization: token } }),
+        this.statisticsClient.get('/api/v1/supplier/sales', { params, headers: { Authorization: token } }),
+      ])
+      const orders = Array.isArray(ordersRes.data) ? ordersRes.data : []
+      const sales = Array.isArray(salesRes.data) ? salesRes.data : []
+      const inFilter = (nm: any) => !nmFilter || nmFilter.includes(Number(nm))
+      for (const o of orders) {
+        const nm = Number(o?.nmId ?? o?.nmID ?? o?.nm)
+        if (!Number.isFinite(nm) || !inFilter(nm)) continue
+        const dt = new Date(o?.date ?? o?.lastChangeDate ?? o?.orderDate ?? Date.now())
+        if (dt < start || dt > end) continue
+        const key = `${nm}-${bucket(dt)}`
+        const row = byNmDate.get(key) || { orders: 0, sales: 0 }
+        row.orders += 1
+        byNmDate.set(key, row)
+      }
+      for (const s of sales) {
+        const nm = Number(s?.nmId ?? s?.nmID ?? s?.nm)
+        if (!Number.isFinite(nm) || !inFilter(nm)) continue
+        const dt = new Date(s?.date ?? s?.lastChangeDate ?? s?.saleDate ?? Date.now())
+        if (dt < start || dt > end) continue
+        const key = `${nm}-${bucket(dt)}`
+        const row = byNmDate.get(key) || { orders: 0, sales: 0 }
+        row.sales += 1
+        byNmDate.set(key, row)
+      }
+      // Shape response
+      const items: any[] = []
+      for (const [key, val] of byNmDate.entries()) {
+        const [nmIdStr, date] = key.split('-')
+        items.push({ nmId: Number(nmIdStr), date, orders: val.orders, sales: val.sales })
+      }
+      // Sort by date
+      items.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+      return { items, dateFrom: startStr, dateTo: endStr }
+    } catch (e: any) {
+      const status = e?.response?.status || 502
+      const message = e?.response?.data?.message || e?.message || 'Statistics history aggregation failed'
+      throw new HttpException({ message, details: e?.response?.data }, status)
+    }
   }
 
   // Analytics: Traffic daily series (last 7 days by default)
@@ -341,12 +494,14 @@ export class WbService {
     }
   }
 
-  // Content: goods list filter (WB docs sometimes show POST). We'll support POST with arbitrary filter body.
   async postContentGoodsFilter(userId: string, filterBody: any) {
     const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
     try {
+      const body = (filterBody && Object.keys(filterBody).length > 0)
+        ? filterBody
+        : { sort: { cursor: { limit: 100 } }, filter: {} }
       const mainAttempt = async () => {
-        const { data } = await this.contentClient.post('/api/v2/list/goods/filter', filterBody, {
+        const { data } = await this.contentClient.post('/api/v2/list/goods/filter', body, {
           headers: { Authorization: token },
         })
         return data
@@ -354,7 +509,6 @@ export class WbService {
       const data = await this.retryOn429(mainAttempt)
       return data
     } catch (e: any) {
-      // If 404, try alternative Content API paths used in some WB doc variants
       const status = e?.response?.status
       if (status === 404) {
         try {
@@ -374,8 +528,11 @@ export class WbService {
         // Final sandbox fallback: return an empty set with a note so UI remains functional
         return { items: [], note: 'sandbox_404' }
       }
+      // Provide clearer guidance on 401/403 (token missing Content permissions)
       const fallbackStatus = status || 502
-      const message = e?.response?.data?.message || e?.message || 'WB Content goods filter failed'
+      const message = (status === 401 || status === 403)
+        ? 'WB Content goods filter unauthorized: ensure the token has Content permissions'
+        : (e?.response?.data?.message || e?.message || 'WB Content goods filter failed')
       throw new HttpException({ message, details: e?.response?.data }, fallbackStatus)
     }
   }

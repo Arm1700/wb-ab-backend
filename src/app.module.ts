@@ -13,6 +13,7 @@ import { WbModule } from './wb/wb.module';
 import { AbTestsModule } from './abtests/abtests.module';
 import { QueuesModule } from './queues/queues.module';
 import { ProductsModule } from './products/products.module';
+import { AbTestModule } from './ab-test/ab-test.module';
 import { SeedModule } from './seed/seed.module';
 
 @Module({
@@ -38,6 +39,7 @@ import { SeedModule } from './seed/seed.module';
     AbTestsModule,
     QueuesModule,
     ProductsModule,
+    AbTestModule,
     SeedModule,
   ],
   controllers: [AppController],

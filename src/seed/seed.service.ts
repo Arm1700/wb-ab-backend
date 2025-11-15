@@ -23,20 +23,17 @@ export class SeedService {
       const name = `${brand} ${productType} ${Math.floor(Math.random() * 1000)}`;
       const categoryId = Math.floor(Math.random() * 100) + 1;
 
-      const product = await this.prisma.product.upsert({
-        where: { nmId },
-        create: {
-          nmId,
-          name,
-          brand,
-          categoryId,
-        },
-        update: {
-          name,
-          brand,
-          categoryId,
-        },
-      });
+      // Since Product now uses a composite unique (userId, nmId), and seed data is global (no user),
+      // we scope seed rows to userId = null. Upsert via findFirst + create/update.
+      const existing = await this.prisma.product.findFirst({ where: { nmId, userId: null } })
+      const product = existing
+        ? await this.prisma.product.update({
+            where: { id: existing.id },
+            data: { name, brand, categoryId },
+          })
+        : await this.prisma.product.create({
+            data: { userId: null, nmId, name, brand, categoryId },
+          })
 
       // Создаем 3-5 изображений для каждого продукта
       const imageCount = Math.floor(Math.random() * 3) + 3;

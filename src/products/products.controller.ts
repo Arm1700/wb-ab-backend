@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common'
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common'
 import { ProductsService } from './products.service'
 import { GetCurrentUserId } from '../auth/decorators/get-current-user-id.decorator'
 
@@ -8,15 +8,24 @@ export class ProductsController {
 
   @Get()
   async list(
+    @GetCurrentUserId() userId: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
     @Query('search') search?: string,
   ) {
-    return this.products.list({ page: Number(page || 1), pageSize: Number(pageSize || 20), search })
+    return this.products.list(userId, { page: Number(page || 1), pageSize: Number(pageSize || 20), search })
   }
 
   @Post('sync')
   async sync(@GetCurrentUserId() userId: string) {
-    return this.products.syncFromWb(userId)
+    return this.products.syncWithWildberries(userId)
+  }
+
+  @Get(':nmId')
+  async getOne(
+    @GetCurrentUserId() userId: string,
+    @Param('nmId') nmIdParam: string,
+  ) {
+    return this.products.getOne(userId, nmIdParam)
   }
 }

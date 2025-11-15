@@ -94,14 +94,13 @@ export class AuthService {
     };
   }
 
-  // Parse TTL which can be a number (seconds) or a string like '15m', '7d', '24h', '30s'
   private parseTtlToSeconds(value: string | number, defaultSeconds: number): number {
     if (typeof value === 'number' && isFinite(value)) return value;
     if (typeof value === 'string') {
       const trimmed = value.trim();
-      // Pure numeric string => seconds
       if (/^\d+$/.test(trimmed)) return parseInt(trimmed, 10);
       const match = trimmed.match(/^(\d+)\s*([smhd])$/i);
+      
       if (match) {
         const amount = parseInt(match[1], 10);
         const unit = match[2].toLowerCase();
@@ -121,6 +120,6 @@ export class AuthService {
   }
 
   async logout(userId: string) {
-    await this.usersService.removeRefreshToken(userId);
+    await this.usersService.removeRefreshTokensByUserId(userId);
   }
 }

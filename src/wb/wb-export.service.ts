@@ -17,7 +17,7 @@ export class WbExportService {
     const statisticsBaseURL = this.configService.get<string>('wb.statisticsBaseUrl') || 'https://statistics-api.wildberries.ru'
     const contentBaseURL = this.configService.get<string>('wb.contentBaseUrl') || 'https://content-api.wildberries.ru'
     const advertBaseURL = this.configService.get<string>('wb.advertBaseUrl') || 'https://advert-api.wildberries.ru'
-    const analyticsBaseURL = this.configService.get<string>('wb.analyticsBaseUrl') || 'https://analytics-api.wildberries.ru'
+    const analyticsBaseURL = this.configService.get<string>('wb.analyticsBaseUrl') || 'https://seller-analytics-api.wildberries.ru'
 
     this.statisticsClient = axios.create({ baseURL: statisticsBaseURL })
     this.contentClient = axios.create({ baseURL: contentBaseURL })
@@ -350,11 +350,170 @@ export class WbExportService {
     return data
   }
 
+  /**
+   * Получить список карточек товаров с Wildberries (v2)
+   * Полностью аналогично curl-запросу:
+   * POST https://content-api.wildberries.ru/content/v2/get/cards/list
+   */
+  async getProductsList(
+    userId: string,
+    params?: {
+      limit?: number
+      textSearch?: string
+      withPhoto?: -1 | 0 | 1
+      updatedAt?: string
+      nmID?: number
+    },
+  ) {
+    const rawToken = await this.getTokenForWBContent(userId)
+    const token = this.normalizeAuthHeader(rawToken)
+    try {
+      const body = {
+        settings: {
+          cursor: {
+            limit: params?.limit ?? 100,
+          },
+          filter: {
+            textSearch: params?.textSearch ?? '',
+            withPhoto: params?.withPhoto ?? -1,
+          },
+          sort: {
+            cursor: {
+              updatedAt: params?.updatedAt ?? 'desc',
+              nmID: params?.nmID ?? 0,
+            },
+          },
+        },
+      }
+
+      console.debug('[WB][getProductsList] request', {
+        limit: body.settings.cursor.limit,
+        textSearch: body.settings.filter.textSearch,
+        withPhoto: body.settings.filter.withPhoto,
+        updatedAt: body.settings.sort.cursor.updatedAt,
+        nmID: body.settings.sort.cursor.nmID,
+        tokenMeta: {
+          length: typeof token === 'string' ? token.length : 0,
+          hasBearerPrefix: typeof rawToken === 'string' ? rawToken.startsWith('Bearer ') : false,
+        },
+      })
+
+      const { data } = await this.contentClient.post(
+        '/content/v2/get/cards/list',
+        body,
+        { headers: { Authorization: token } },
+      )
+      console.log('data', data)
+
+      const cardsLen = Array.isArray((data as any)?.cards) ? (data as any).cards.length : 0
+      const cursor = (data as any)?.cursor
+      console.debug('[WB][getProductsList] response', {
+        cards: cardsLen,
+        cursor,
+      })
+
+      // WB возвращает объект вида { cards: [...], cursor: {...} }
+      return data
+    } catch (error: any) {
+      console.error('[WB][getProductsList] error', {
+        status: error?.response?.status,
+        statusText: error?.response?.statusText,
+        data: error?.response?.data,
+      })
+      throw new Error(
+        `Не удалось получить список карточек WB: ${error?.response?.data?.detail || error.message}`,
+      )
+    }
+  }
+
+  /**
+   * Забрать все карточки постранично по курсору updatedAt/nmID
+   */
+  async fetchAllProducts(userId: string, params?: { limit?: number; textSearch?: string; withPhoto?: -1 | 0 | 1 }) {
+    const allCards: any[] = []
+    const seen = new Set<string>() // nmID set
+    let updatedAt: string | undefined = undefined
+    let nmID: number | undefined = undefined
+    let prevCursorKey: string | undefined
+    const limit = params?.limit ?? 100
+
+    while (true) {
+      const res: any = await this.getProductsList(userId, {
+        limit,
+        textSearch: params?.textSearch,
+        withPhoto: params?.withPhoto,
+        updatedAt,
+        nmID,
+      })
+
+      const cards: any[] = Array.isArray(res?.cards) ? res.cards : []
+      const cursor = res?.cursor
+      console.debug('[WB][fetchAllProducts] batch', { size: cards.length, cursor })
+
+      if (!cards.length) {
+        console.info('[WB][fetchAllProducts] break: empty batch')
+        break
+      }
+
+      // de-duplicate by nmID
+      for (const c of cards) {
+        const key = String(c?.nmID ?? c?.nmId ?? c?.id ?? '')
+        if (!key || seen.has(key)) continue
+        seen.add(key)
+        allCards.push(c)
+      }
+
+      const nextUpdatedAt = cursor?.updatedAt
+      const nextNmID = cursor?.nmID
+      const cursorKey = `${nextUpdatedAt ?? ''}-${nextNmID ?? ''}`
+
+      // Break if cursor is missing
+      if (!nextUpdatedAt || !Number.isFinite(Number(nextNmID))) {
+        console.info('[WB][fetchAllProducts] break: missing cursor', { nextUpdatedAt, nextNmID })
+        break
+      }
+
+      // Break if cursor does not advance (WB repeats the same page)
+      if (prevCursorKey && prevCursorKey === cursorKey) {
+        console.warn('[WB][fetchAllProducts] break: cursor did not advance', { cursorKey })
+        break
+      }
+
+      // Heuristic: if batch smaller than limit -> last page
+      if (cards.length < limit) {
+        console.info('[WB][fetchAllProducts] break: last page (size < limit)', { size: cards.length, limit })
+        break
+      }
+
+      // advance
+      prevCursorKey = cursorKey
+      updatedAt = nextUpdatedAt
+      nmID = nextNmID
+    }
+
+    console.info('[WB][fetchAllProducts] done', { total: allCards.length })
+    return allCards
+  }
+
   // ==================== ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ====================
 
   private async getTokenOrThrow(userId: string): Promise<string> {
     const token = await this.usersService.getWbApiToken(userId)
     if (!token) throw new Error('WB API token is not set for this user')
+    return token
+  }
+
+  private normalizeAuthHeader(rawToken: string): string {
+    if (!rawToken) return rawToken
+    const t = rawToken.trim()
+    // всегда возвращаем токен с Bearer
+    return t.startsWith('Bearer ') ? t : `Bearer ${t}`
+  }
+  
+
+  private async getTokenForWBContent(userId: string): Promise<string> {
+    const token = await this.usersService.getWbPartnerToken(userId)
+    if (!token) throw new Error('WB partner API token is not set for this user')
     return token
   }
 }

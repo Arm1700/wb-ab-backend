@@ -67,9 +67,7 @@ export class UsersService {
 
   async setRefreshToken(userId: string, refreshToken: string, expiresAt: Date) {
     // Invalidate any existing refresh tokens for this user
-    await this.prisma.refreshToken.deleteMany({
-      where: { userId },
-    });
+    await this.removeRefreshTokensByUserId(userId);
 
     // Create new refresh token
     await this.prisma.refreshToken.create({
@@ -82,8 +80,15 @@ export class UsersService {
   }
 
   async removeRefreshToken(token: string) {
+    // @deprecated Use removeRefreshTokensByUserId instead
     await this.prisma.refreshToken.deleteMany({
       where: { token },
+    });
+  }
+
+  async removeRefreshTokensByUserId(userId: string) {
+    await this.prisma.refreshToken.deleteMany({
+      where: { userId },
     });
   }
 
@@ -131,5 +136,34 @@ export class UsersService {
       try { return decrypt(stored); } catch { /* stored may be plain, fall through */ }
     }
     return stored;
+  }
+
+  async getWbPartnerToken(userId: string): Promise<string | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { wbPartnerToken: true },
+    });
+    if (!user?.wbPartnerToken) return null;
+    const stored = user.wbPartnerToken;
+    if (isKeyConfigured()) {
+      try { return decrypt(stored); } catch { /* stored may be plain, fall through */ }
+    }
+    return stored;
+  }
+
+  async setWbPartnerToken(userId: string, token: string): Promise<void> {
+    const toStore = ((): string => {
+      if (isKeyConfigured()) {
+        try { return encrypt(token); } catch { /* ignore and store plain */ }
+      }
+      return token;
+    })();
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        wbPartnerToken: toStore,
+        wbPartnerTokenUpdatedAt: new Date(),
+      },
+    });
   }
 }
