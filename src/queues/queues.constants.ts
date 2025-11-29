@@ -1,5 +1,4 @@
 export const QUEUE_NAMES = {
-  AbRotate: 'ab_rotate',
   WbReports: 'wb_reports',
   WbFetchMetrics: 'wb_fetch_metrics',
 } as const

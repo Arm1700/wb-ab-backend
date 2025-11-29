@@ -10,17 +10,18 @@ import { CoreModule } from './core/core.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { WbModule } from './wb/wb.module';
-import { AbTestsModule } from './abtests/abtests.module';
 import { QueuesModule } from './queues/queues.module';
 import { ProductsModule } from './products/products.module';
-import { AbTestModule } from './ab-test/ab-test.module';
+// import { AbTestsModule } from './abtests/abtests.module';
+// import { AbTestModule } from './ab-test/ab-test.module';
+import { AbAdsModule } from './ab-ads/ab-ads.module';
 import { SeedModule } from './seed/seed.module';
 
 @Module({
   imports: [
     // Core modules (Config, Prisma, etc.)
     CoreModule,
-    
+
     // Rate limiting
     ThrottlerModule.forRoot({
       throttlers: [{
@@ -36,10 +37,11 @@ import { SeedModule } from './seed/seed.module';
     AuthModule,
     UsersModule,
     WbModule,
-    AbTestsModule,
+    // AbTestsModule, // removed legacy image A/B module
     QueuesModule,
     ProductsModule,
-    AbTestModule,
+    // AbTestModule, // removed legacy ABTest (photo-rotation) module
+    AbAdsModule,
     SeedModule,
   ],
   controllers: [AppController],
@@ -51,4 +53,4 @@ import { SeedModule } from './seed/seed.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }

@@ -3,18 +3,15 @@ import { ConfigService } from '@nestjs/config'
 import { Queue } from 'bullmq'
 import IORedis, { Redis } from 'ioredis'
 import { QUEUE_NAMES } from './queues.constants'
-import { AbRotateProcessor } from './workers/ab-rotate.processor'
 import { WbReportsProcessor } from './workers/wb-reports.processor'
 import { WbFetchMetricsProcessor } from './workers/wb-fetch-metrics.processor'
-import { AbTestsService } from '../abtests/abtests.service'
 import { WbService } from '../wb/wb.service'
 import { PrismaModule } from '../prisma/prisma.module'
 import { WbModule } from '../wb/wb.module'
-import { AbTestsModule } from '../abtests/abtests.module'
 
 @Global()
 @Module({
-  imports: [PrismaModule, WbModule, AbTestsModule],
+  imports: [PrismaModule, WbModule],
   providers: [
     // Redis connection
     {
@@ -38,11 +35,6 @@ import { AbTestsModule } from '../abtests/abtests.module'
     },
     // Queues
     {
-      provide: 'QUEUE_ab_rotate',
-      inject: ['REDIS_CONN'],
-      useFactory: (conn: Redis) => new Queue(QUEUE_NAMES.AbRotate, { connection: conn }),
-    },
-    {
       provide: 'QUEUE_wb_reports',
       inject: ['REDIS_CONN'],
       useFactory: (conn: Redis) => new Queue(QUEUE_NAMES.WbReports, { connection: conn }),
@@ -53,13 +45,11 @@ import { AbTestsModule } from '../abtests/abtests.module'
       useFactory: (conn: Redis) => new Queue(QUEUE_NAMES.WbFetchMetrics, { connection: conn }),
     },
     // Workers
-    AbRotateProcessor,
     WbReportsProcessor,
     WbFetchMetricsProcessor,
   ],
   exports: [
     'REDIS_CONN',
-    'QUEUE_ab_rotate',
     'QUEUE_wb_reports',
     'QUEUE_wb_fetch_metrics',
   ],

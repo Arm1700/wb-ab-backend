@@ -1,16 +1,16 @@
 import { Controller, Post, Delete, Get, Body, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { SeedService } from './seed.service';
-import { Public } from '../auth/decorators/public.decorator';
+import { Public } from '../common/decorators/public.decorator';
 
 @ApiTags('Seed (Test Data)')
 @Controller('seed')
 @Public()
 export class SeedController {
-  constructor(private readonly seedService: SeedService) {}
+  constructor(private readonly seedService: SeedService) { }
 
   @Post('products')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Создать тестовые продукты',
     description: 'Генерирует указанное количество тестовых продуктов с изображениями'
   })
@@ -22,7 +22,7 @@ export class SeedController {
   }
 
   @Post('metrics')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Создать тестовые метрики',
     description: 'Генерирует метрики для существующих продуктов за указанное количество дней'
   })
@@ -38,22 +38,22 @@ export class SeedController {
     return this.seedService.seedMetrics(daysBack, prodCount);
   }
 
-  @Post('abtests')
-  @ApiOperation({ 
-    summary: 'Создать тестовые A/B тесты',
-    description: 'Генерирует A/B тесты с вариантами и метриками для существующих продуктов'
+  @Post('ab-ads-tests')
+  @ApiOperation({
+    summary: 'Создать тестовые A/B рекламные тесты (AbAd*)',
+    description: 'Создает черновики тестов рекламы с вариантами и демо-статистикой (без реальных WB кампаний)'
   })
-  @ApiQuery({ name: 'count', required: false, type: Number, description: 'Количество A/B тестов (по умолчанию 5)' })
-  @ApiResponse({ status: 201, description: 'A/B тесты успешно созданы' })
-  async seedAbTests(@Query('count') count?: string) {
+  @ApiQuery({ name: 'count', required: false, type: Number, description: 'Количество A/B рекламных тестов (по умолчанию 5)' })
+  @ApiResponse({ status: 201, description: 'A/B рекламные тесты успешно созданы' })
+  async seedAbAdsTests(@Query('count') count?: string) {
     const testsCount = count ? parseInt(count, 10) : 5;
-    return this.seedService.seedAbTests(testsCount);
+    return this.seedService.seedAbAdsTests(testsCount);
   }
 
   @Post('all')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Создать все тестовые данные',
-    description: 'Генерирует полный набор тестовых данных: продукты, метрики и A/B тесты'
+    description: 'Генерирует полный набор тестовых данных: продукты, метрики и A/B рекламные тесты'
   })
   @ApiBody({
     schema: {
@@ -61,7 +61,7 @@ export class SeedController {
       properties: {
         productsCount: { type: 'number', default: 20, description: 'Количество продуктов' },
         metricsDays: { type: 'number', default: 30, description: 'Количество дней метрик' },
-        abTestsCount: { type: 'number', default: 5, description: 'Количество A/B тестов' },
+        abTestsCount: { type: 'number', default: 5, description: 'Количество A/B рекламных тестов' },
       },
     },
     required: false,
@@ -78,7 +78,7 @@ export class SeedController {
   }
 
   @Delete('all')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Удалить все тестовые данные',
     description: 'Очищает базу данных от всех продуктов, метрик и A/B тестов'
   })
@@ -88,7 +88,7 @@ export class SeedController {
   }
 
   @Get('stats')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Получить статистику по тестовым данным',
     description: 'Возвращает количество записей каждого типа в базе данных'
   })

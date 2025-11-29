@@ -127,66 +127,80 @@ CREATE TABLE "ProductCharacteristic" (
 );
 
 -- CreateTable
-CREATE TABLE "AbTest" (
+CREATE TABLE "AbAdTest" (
     "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
-    "productId" TEXT NOT NULL,
+    "productId" TEXT,
     "name" TEXT NOT NULL,
-    "status" TEXT NOT NULL DEFAULT 'running',
-    "threshold" INTEGER NOT NULL DEFAULT 1500,
+    "status" TEXT NOT NULL DEFAULT 'draft',
+    "budget" INTEGER,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "AbTest_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "AbAdTest_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "AbVariant" (
+CREATE TABLE "AbAdVariant" (
     "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
-    "abTestId" TEXT NOT NULL,
-    "imageUrl" TEXT NOT NULL,
-    "variantKey" TEXT NOT NULL,
+    "abAdTestId" TEXT NOT NULL,
+    "variantName" TEXT NOT NULL,
+    "nmIds" JSONB NOT NULL,
+    "wbCampaignId" INTEGER,
+    "dailyBudget" INTEGER,
+    "bidType" TEXT NOT NULL DEFAULT 'manual',
+    "placementTypes" JSONB,
+    "status" TEXT NOT NULL DEFAULT 'draft',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "AbVariant_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "AbAdVariant_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "AbVariantMetric" (
+CREATE TABLE "AbAdStats" (
     "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
-    "variantId" TEXT NOT NULL,
+    "abAdVariantId" TEXT NOT NULL,
     "date" TIMESTAMP(3) NOT NULL,
     "impressions" INTEGER NOT NULL DEFAULT 0,
     "clicks" INTEGER NOT NULL DEFAULT 0,
-    "orders" INTEGER NOT NULL DEFAULT 0,
+    "ctr" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "conversions" INTEGER NOT NULL DEFAULT 0,
+    "spend" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "AbVariantMetric_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "AbAdStats_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "AbTestRun" (
-    "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
-    "nmId" BIGINT NOT NULL,
-    "isRunning" BOOLEAN NOT NULL DEFAULT true,
-    "currentIndex" INTEGER NOT NULL DEFAULT 0,
-    "switchDate" TEXT NOT NULL,
-    "threshold" INTEGER NOT NULL DEFAULT 1000,
+CREATE TABLE "wb_adverts" (
+    "id" INTEGER NOT NULL,
+    "type" INTEGER NOT NULL,
+    "status" INTEGER NOT NULL,
+    "changeTime" TIMESTAMP(3),
+    "userId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "AbTestRun_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "wb_adverts_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "AbTestPhoto" (
-    "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
-    "runId" TEXT NOT NULL,
-    "order" INTEGER NOT NULL,
-    "fileName" TEXT NOT NULL,
-    "views" INTEGER NOT NULL DEFAULT 0,
-    "uploadedAt" TEXT NOT NULL,
+CREATE TABLE "AbTestSession" (
+    "id" SERIAL NOT NULL,
+    "userId" TEXT NOT NULL,
+    "campaignId" BIGINT NOT NULL,
+    "nmId" BIGINT NOT NULL,
+    "photoUrls" TEXT[],
+    "viewsPerStep" INTEGER NOT NULL DEFAULT 1500,
+    "totalViews" BIGINT NOT NULL DEFAULT 0,
+    "currentStep" INTEGER NOT NULL DEFAULT 0,
+    "status" TEXT NOT NULL DEFAULT 'running',
+    "autoTopUp" BOOLEAN NOT NULL DEFAULT false,
+    "topUpThreshold" INTEGER NOT NULL DEFAULT 1000,
+    "topUpAmount" INTEGER NOT NULL DEFAULT 5000,
+    "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "AbTestPhoto_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "AbTestSession_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -220,19 +234,31 @@ CREATE UNIQUE INDEX "ProductSku_productId_chrtID_key" ON "ProductSku"("productId
 CREATE INDEX "ProductCharacteristic_productId_idx" ON "ProductCharacteristic"("productId");
 
 -- CreateIndex
-CREATE INDEX "AbTest_productId_idx" ON "AbTest"("productId");
+CREATE INDEX "AbAdTest_productId_idx" ON "AbAdTest"("productId");
 
 -- CreateIndex
-CREATE INDEX "AbVariantMetric_variantId_date_idx" ON "AbVariantMetric"("variantId", "date");
+CREATE INDEX "AbAdVariant_abAdTestId_idx" ON "AbAdVariant"("abAdTestId");
 
 -- CreateIndex
-CREATE INDEX "AbTestRun_nmId_isRunning_idx" ON "AbTestRun"("nmId", "isRunning");
+CREATE INDEX "AbAdVariant_wbCampaignId_idx" ON "AbAdVariant"("wbCampaignId");
 
 -- CreateIndex
-CREATE INDEX "AbTestPhoto_runId_idx" ON "AbTestPhoto"("runId");
+CREATE INDEX "AbAdStats_abAdVariantId_date_idx" ON "AbAdStats"("abAdVariantId", "date");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "AbTestPhoto_runId_order_key" ON "AbTestPhoto"("runId", "order");
+CREATE UNIQUE INDEX "AbAdStats_abAdVariantId_date_key" ON "AbAdStats"("abAdVariantId", "date");
+
+-- CreateIndex
+CREATE INDEX "wb_adverts_userId_type_status_idx" ON "wb_adverts"("userId", "type", "status");
+
+-- CreateIndex
+CREATE INDEX "AbTestSession_campaignId_idx" ON "AbTestSession"("campaignId");
+
+-- CreateIndex
+CREATE INDEX "AbTestSession_status_idx" ON "AbTestSession"("status");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "AbTestSession_userId_campaignId_key" ON "AbTestSession"("userId", "campaignId");
 
 -- AddForeignKey
 ALTER TABLE "refresh_tokens" ADD CONSTRAINT "refresh_tokens_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -256,13 +282,16 @@ ALTER TABLE "ProductSku" ADD CONSTRAINT "ProductSku_productId_fkey" FOREIGN KEY 
 ALTER TABLE "ProductCharacteristic" ADD CONSTRAINT "ProductCharacteristic_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "AbTest" ADD CONSTRAINT "AbTest_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "AbAdTest" ADD CONSTRAINT "AbAdTest_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "AbVariant" ADD CONSTRAINT "AbVariant_abTestId_fkey" FOREIGN KEY ("abTestId") REFERENCES "AbTest"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "AbAdVariant" ADD CONSTRAINT "AbAdVariant_abAdTestId_fkey" FOREIGN KEY ("abAdTestId") REFERENCES "AbAdTest"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "AbVariantMetric" ADD CONSTRAINT "AbVariantMetric_variantId_fkey" FOREIGN KEY ("variantId") REFERENCES "AbVariant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "AbAdStats" ADD CONSTRAINT "AbAdStats_abAdVariantId_fkey" FOREIGN KEY ("abAdVariantId") REFERENCES "AbAdVariant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "AbTestPhoto" ADD CONSTRAINT "AbTestPhoto_runId_fkey" FOREIGN KEY ("runId") REFERENCES "AbTestRun"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "wb_adverts" ADD CONSTRAINT "wb_adverts_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "AbTestSession" ADD CONSTRAINT "AbTestSession_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;

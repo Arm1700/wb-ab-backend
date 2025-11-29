@@ -1,5 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// prisma/schema.prisma
 
 generator client {
   provider        = "prisma-client-js"
@@ -12,23 +11,24 @@ datasource db {
   extensions = [pg_trgm, pgcrypto]
 }
 
-// Example model - replace with your actual models
 enum UserRole {
   USER
   ADMIN
 }
 
 model User {
-  id                  String         @id @default(dbgenerated("gen_random_uuid()"))
-  email               String         @unique
-  password            String
-  role                UserRole       @default(USER)
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
-  refreshTokens       RefreshToken[]
-  wbPartnerToken      String?
+  id                      String         @id @default(dbgenerated("gen_random_uuid()"))
+  email                   String         @unique
+  password                String
+  role                    UserRole       @default(USER)
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
+  refreshTokens           RefreshToken[]
+  wbPartnerToken          String?
   wbPartnerTokenUpdatedAt DateTime?
-  products            Product[]
+  products                Product[]
+  wbAdverts               WbAdvert[]    // связь с WbAdvert
+  abTestSessions          AbTestSession[]
 
   @@map("users")
 }
@@ -46,29 +46,12 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
-// Add your models here based on your TypeORM entities
-// Example:
-// model Experiment {
-//   id          Int       @id @default(autoincrement())
-//   name        String
-//   description String?
-//   startDate   DateTime
-//   endDate     DateTime?
-//   isActive    Boolean   @default(true)
-//   variants    Variant[]
-//   createdAt   DateTime  @default(now())
-//   updatedAt   DateTime  @updatedAt
-// }
-
-/// --- Product/Analytics models for WB integration and A/B tests ---
-
 model Product {
-  id         String   @id @default(dbgenerated("gen_random_uuid()"))
-  nmId       BigInt
-  name       String?
-  brand      String?
-  categoryId Int?
-  // WB additional fields
+  id           String    @id @default(dbgenerated("gen_random_uuid()"))
+  nmId         BigInt
+  name         String?
+  brand        String?
+  categoryId   Int?
   vendorCode   String?
   subjectName  String?
   description  String?
@@ -77,25 +60,22 @@ model Product {
   wbUpdatedAt  DateTime?
   syncedAt     DateTime?
   syncStatus   String?
-  // Dimensions
   width        Int?
   height       Int?
   length       Int?
   weightBrutto Float?
   dimsIsValid  Boolean?
-  // Keep original WB payload
   rawCard      Json?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  userId     String?
-  user       User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  metrics      ProductMetric[]
-  images       ProductImage[]
-  imageHistory ProductImageHistory[]
-  skus         ProductSku[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  userId       String?
+  user         User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  metrics         ProductMetric[]
+  images          ProductImage[]
+  imageHistory    ProductImageHistory[]
+  skus            ProductSku[]
   characteristics ProductCharacteristic[]
-  abTests      AbTest[]
+  abAdTests       AbAdTest[]
 
   @@unique([userId, nmId], name: "user_nm")
   @@index([userId])
@@ -109,11 +89,10 @@ model ProductMetric {
   clicks      Int      @default(0)
   orders      Int      @default(0)
   revenue     Decimal? @db.Decimal(12, 2)
-  // Воронка продаж
-  openCount   Int      @default(0) // Открытия карточки
-  cartCount   Int      @default(0) // Добавления в корзину
-  buyoutCount Int      @default(0) // Выкупы
-  buyoutSum   Decimal? @db.Decimal(12, 2) // Сумма выкупов
+  openCount   Int      @default(0)
+  cartCount   Int      @default(0)
+  buyoutCount Int      @default(0)
+  buyoutSum   Decimal? @db.Decimal(12, 2)
   createdAt   DateTime @default(now())
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -139,7 +118,7 @@ model ProductImageHistory {
   newUrl          String
   changedAt       DateTime @default(now())
   changedByUserId String?
-  reason          String? // e.g. 'ab-test'
+  reason          String?
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
@@ -147,7 +126,7 @@ model ProductImageHistory {
 }
 
 model ProductSku {
-  id        String   @id @default(dbgenerated("gen_random_uuid()"))
+  id        String  @id @default(dbgenerated("gen_random_uuid()"))
   productId String
   chrtID    BigInt
   techSize  String?
@@ -160,7 +139,7 @@ model ProductSku {
 }
 
 model ProductCharacteristic {
-  id        String   @id @default(dbgenerated("gen_random_uuid()"))
+  id        String  @id @default(dbgenerated("gen_random_uuid()"))
   productId String
   charId    Int?
   name      String?
@@ -171,72 +150,133 @@ model ProductCharacteristic {
   @@index([productId])
 }
 
-model AbTest {
+model AbAdTest {
   id        String   @id @default(dbgenerated("gen_random_uuid()"))
-  productId String
+  productId String?
   name      String
-  status    String   @default("running") // running | paused | finished
-  threshold Int      @default(1500)
+  status    String   @default("draft")
+  budget    Int?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  product  Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
-  variants AbVariant[]
+  product  Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variants AbAdVariant[]
 
   @@index([productId])
 }
 
-model AbVariant {
-  id         String   @id @default(dbgenerated("gen_random_uuid()"))
-  abTestId   String
-  imageUrl   String
-  variantKey String // 'A' | 'B' | ...
-  createdAt  DateTime @default(now())
+model AbAdVariant {
+  id           String   @id @default(dbgenerated("gen_random_uuid()"))
+  abAdTestId   String
+  variantName  String
+  nmIds        Json
+  wbCampaignId Int?
+  dailyBudget  Int?
+  bidType      String   @default("manual")
+  placementTypes Json?
+  status       String   @default("draft")
+  createdAt    DateTime @default(now())
 
-  test    AbTest            @relation(fields: [abTestId], references: [id], onDelete: Cascade)
-  metrics AbVariantMetric[]
+  test  AbAdTest    @relation(fields: [abAdTestId], references: [id], onDelete: Cascade)
+  stats AbAdStats[]
+
+  @@index([abAdTestId])
+  @@index([wbCampaignId])
 }
 
-model AbVariantMetric {
+model AbAdStats {
+  id            String   @id @default(dbgenerated("gen_random_uuid()"))
+  abAdVariantId String
+  date          DateTime
+  impressions   Int      @default(0)
+  clicks        Int      @default(0)
+  ctr           Float    @default(0)
+  conversions   Int      @default(0)
+  spend         Float    @default(0)
+  createdAt     DateTime @default(now())
+
+  variant AbAdVariant @relation(fields: [abAdVariantId], references: [id], onDelete: Cascade)
+
+  @@unique([abAdVariantId, date], name: "variant_date")
+  @@index([abAdVariantId, date])
+}
+
+model WbAdvert {
+  id         Int      @id
+  type       Int
+  status     Int
+  changeTime DateTime?
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId, type, status])
+  @@map("wb_adverts")
+}
+
+model WbCampaignStats {
   id          String   @id @default(dbgenerated("gen_random_uuid()"))
-  variantId   String
-  date        DateTime
+  userId      String
+  campaignId  Int
+  date        DateTime @db.Date
   impressions Int      @default(0)
   clicks      Int      @default(0)
-  orders      Int      @default(0)
+  ctr         Float    @default(0)
+  conversions Int      @default(0)
+  spend       Float    @default(0)
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  variant AbVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
-
-  @@index([variantId, date])
+  @@unique([userId, campaignId, date], name: "user_campaign_date")
+  @@index([userId, campaignId, date])
+  @@map("wb_campaign_stats")
 }
 
-/// --- AB-Test persistent state ---
-model AbTestRun {
-  id           String        @id @default(dbgenerated("gen_random_uuid()"))
-  nmId         BigInt
-  isRunning    Boolean       @default(true)
-  currentIndex Int           @default(0)
-  switchDate   String
-  threshold    Int           @default(1000)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+model AbTestSession {
+  id             Int                 @id @default(autoincrement())
+  userId         String
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaignId     BigInt
+  nmId           BigInt
+  photoUrls      String[]
+  viewsPerStep   Int                 @default(1000)
+  totalViews     BigInt              @default(0)
+  currentStep    Int                 @default(0)
+  status         String              @default("running") // running, paused, completed, stopped
+  autoTopUp      Boolean             @default(false)
+  topUpThreshold Int                 @default(1000)
+  topUpAmount    Int                 @default(5000)
+  startedAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  lastCheckAt    DateTime?
+  nextCheckAt    DateTime?
+  imageStats     AbTestImageStats[]
 
-  photos AbTestPhoto[]
-
-  @@index([nmId, isRunning])
+  @@index([campaignId])
+  @@index([status])
+  @@index([status, nextCheckAt])
+  @@unique([userId, campaignId], name: "user_campaign")
+  @@map("ab_test_sessions")
 }
 
-model AbTestPhoto {
-  id         String    @id @default(dbgenerated("gen_random_uuid()"))
-  runId      String
-  order      Int
-  fileName   String
-  views      Int       @default(0)
-  uploadedAt String
+model AbTestImageStats {
+  id            String        @id @default(dbgenerated("gen_random_uuid()"))
+  sessionId     Int
+  session       AbTestSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  imageUrl      String
+  imageIndex    Int           // 0-4 (which image in the array)
+  targetViews   Int           // Usually 1000
+  startedAt     DateTime      @default(now())
+  completedAt   DateTime?
+  viewsAtStart  BigInt        // Total campaign views when this image started
+  viewsAtEnd    BigInt?       // Total campaign views when this image completed
+  checkHistory  Json[]        @default([]) // Array of {timestamp, totalViews, viewsSinceStart}
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
-  run AbTestRun @relation(fields: [runId], references: [id], onDelete: Cascade)
-
-  @@unique([runId, order])
-  @@index([runId])
+  @@index([sessionId])
+  @@index([sessionId, imageIndex])
+  @@map("ab_test_image_stats")
 }
+

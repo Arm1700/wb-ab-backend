@@ -128,7 +128,7 @@ copy .env.example .env.local
 
 Пример `.env.local` для frontend:
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:3001/api
+NEXT_PUBLIC_NEST_URL=http://localhost:3001/api
 ```
 
 #### 4. Запуск PostgreSQL

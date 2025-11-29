@@ -26,9 +26,392 @@ export class WbService {
     this.contentClient = axios.create({ baseURL: 'https://content-api.wildberries.ru' })
   }
 
+  private buildWbError(e: any, fallback: string) {
+    const status = e?.response?.status || 502
+    const raw = e?.response?.data
+    const wbMessage = raw?.message || raw?.error || raw?.description
+    const message = typeof wbMessage === 'string' ? wbMessage : (e?.message || fallback)
+    return { status, payload: { message, details: raw } }
+  }
+
+  // --- Advert API helpers ---
+  async getAdvertCampaigns(userId: string, params?: Record<string, any>) {
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    try {
+      const attempt = async () => {
+        const { data } = await this.advertClient.get('/adv/v1/promotion/list', {
+          params: params ?? {},
+          headers: { Authorization: this.normalizeAuthHeader(token) },
+        })
+        return data
+      }
+      return await this.retryOn429(attempt)
+    } catch (e: any) {
+      const status = e?.response?.status || 502
+      const message = e?.response?.data?.message || e?.message || 'WB promotion list failed'
+      throw new HttpException({ message, details: e?.response?.data }, status)
+    }
+  }
+
+  async updateMainPhoto(userId: string, nmId: number, photoUrl: string) {
+    if (!photoUrl) {
+      throw new BadRequestException('photoUrl is required')
+    }
+    const token = this.normalizeAuthHeader(await this.getTokenForWBContent(userId))
+    const payload = {
+      nms: [
+        {
+          nmId,
+          photos: [{ photo: photoUrl }],
+        },
+      ],
+    }
+    const attempt = async () => {
+      const { data } = await this.contentClient.post('/content/v2/cards/update', payload, {
+        headers: { Authorization: token },
+      })
+      return data
+    }
+    try {
+      return await this.retryOn429(attempt)
+    } catch (e: any) {
+      const { status, payload } = this.buildWbError(e, 'WB update photo failed')
+      throw new HttpException(payload, status)
+    }
+  }
+
+  async getAuctionAdverts(userId: string, query?: { status?: number; order?: 'create'|'change'|'id'; direction?: 'asc'|'desc' }) {
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    const params: Record<string, any> = {}
+    if (query?.status != null) params.status = Number(query.status)
+    if (query?.order) params.order = query.order
+    if (query?.direction) params.direction = query.direction
+
+    try {
+      const { data } = await this.advertClient.get('/adv/v0/auction/adverts', {
+        params,
+        headers: { Authorization: this.normalizeAuthHeader(token) },
+      })
+      return data
+    } catch (e: any) {
+      const status = e?.response?.status || 502
+      const message = e?.response?.data?.message || e?.message || 'WB auction adverts request failed'
+      throw new HttpException({ message, details: e?.response?.data }, status)
+    }
+  }
+
+  // Advert: promotion adverts list (POST /adv/v1/promotion/adverts)
+  async getAdvertPromotionAdverts(userId: string, advertIds: number[]) {
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    const payload = Array.isArray(advertIds)
+      ? advertIds.filter(id => Number.isFinite(id)).map(id => Number(id))
+      : []
+    if (!payload.length) {
+      return []
+    }
+    try {
+      const { data } = await this.advertClient.post('/adv/v1/promotion/adverts', payload, {
+        headers: { Authorization: this.normalizeAuthHeader(token) },
+      })
+      return data
+    } catch (e: any) {
+      const status = e?.response?.status || 502
+      const message = e?.response?.data?.message || e?.message || 'WB promotion adverts request failed'
+      throw new HttpException({ message, details: e?.response?.data }, status)
+    }
+  }
+
+  // WB Promotion API v0: pause campaign
+  async pauseAdvertCampaign(userId: string, campaignId: number) {
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    const attempt = async () => {
+      const { data } = await this.advertClient.get('/adv/v0/pause', {
+        params: { id: campaignId },
+        headers: { Authorization: this.normalizeAuthHeader(token) },
+      })
+      return data
+    }
+    try {
+      return await this.retryOn429(attempt)
+    } catch (e: any) {
+      const { status, payload } = this.buildWbError(e, 'WB pause campaign failed')
+      throw new HttpException(payload, status)
+    }
+  }
+
+  // WB Promotion API v0: stop campaign
+  async stopAdvertCampaign(userId: string, campaignId: number) {
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    const attempt = async () => {
+      const { data } = await this.advertClient.get('/adv/v0/stop', {
+        params: { id: campaignId },
+        headers: { Authorization: this.normalizeAuthHeader(token) },
+      })
+      return data
+    }
+    try {
+      return await this.retryOn429(attempt)
+    } catch (e: any) {
+      const { status, payload } = this.buildWbError(e, 'WB stop campaign failed')
+      throw new HttpException(payload, status)
+    }
+  }
+
+  async deleteAdvertCampaign(userId: string, campaignId: number) {
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    const attempt = async () => {
+      const { data } = await this.advertClient.get('/adv/v0/delete', {
+        params: { id: campaignId },
+        headers: { Authorization: this.normalizeAuthHeader(token) },
+      })
+      return data
+    }
+    try {
+      return await this.retryOn429(attempt)
+    } catch (e: any) {
+      const { status, payload } = this.buildWbError(e, 'WB delete campaign failed')
+      throw new HttpException(payload, status)
+    }
+  }
+
+  async renameAdvertCampaign(userId: string, body: { advertId: number; name: string }) {
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    const attempt = async () => {
+      const { data } = await this.advertClient.post('/adv/v0/rename', body, {
+        headers: { Authorization: this.normalizeAuthHeader(token) },
+      })
+      return data
+    }
+    try {
+      return await this.retryOn429(attempt)
+    } catch (e: any) {
+      const { status, payload } = this.buildWbError(e, 'WB rename campaign failed')
+      throw new HttpException(payload, status)
+    }
+  }
+
+  async updateAdvertBids(userId: string, body: any) {
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    const attempt = async () => {
+      const { data } = await this.advertClient.patch('/adv/v0/bids', body, {
+        headers: { Authorization: this.normalizeAuthHeader(token) },
+      })
+      return data
+    }
+    try {
+      return await this.retryOn429(attempt)
+    } catch (e: any) {
+      const { status, payload } = this.buildWbError(e, 'WB bids update failed')
+      throw new HttpException(payload, status)
+    }
+  }
+
+  async getMinBids(userId: string, paymentType = 'cpm') {
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    const attempt = async () => {
+      const { data } = await this.advertClient.get('/adv/v0/bids/min', {
+        params: { payment_type: paymentType },
+        headers: { Authorization: token },
+      })
+      return data
+    }
+    try {
+      return await this.retryOn429(attempt)
+    } catch (e: any) {
+      const { status, payload } = this.buildWbError(e, 'WB min bids request failed')
+      throw new HttpException(payload, status)
+    }
+  }
+
+  async updateAdvertAuctionPlacements(userId: string, body: any) {
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    const attempt = async () => {
+      const { data } = await this.advertClient.put('/adv/v0/auction/placements', body, {
+        headers: { Authorization: this.normalizeAuthHeader(token) },
+      })
+      return data
+    }
+    try {
+      return await this.retryOn429(attempt)
+    } catch (e: any) {
+      const { status, payload } = this.buildWbError(e, 'WB auction placements update failed')
+      throw new HttpException(payload, status)
+    }
+  }
+
+  async updateAdvertAuctionBids(userId: string, body: any) {
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    const attempt = async () => {
+      const { data } = await this.advertClient.patch('/adv/v0/auction/bids', body, {
+        headers: { Authorization: this.normalizeAuthHeader(token) },
+      })
+      return data
+    }
+    try {
+      return await this.retryOn429(attempt)
+    } catch (e: any) {
+      const { status, payload } = this.buildWbError(e, 'WB auction bids update failed')
+      throw new HttpException(payload, status)
+    }
+  }
+
+  async createAdvertCampaign(userId: string, payload: any) {
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    const attempt = async () => {
+      const { data } = await this.advertClient.post('/adv/v2/seacat/save-ad', payload, {
+        headers: { Authorization: this.normalizeAuthHeader(token) },
+      })
+      return data
+    }
+    try {
+      return await this.retryOn429(attempt)
+    } catch (e: any) {
+      const { status, payload } = this.buildWbError(e, 'WB create advert campaign failed')
+      throw new HttpException(payload, status)
+    }
+  }
+
+  async startAdvertCampaign(userId: string, campaignId: number) {
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    const attempt = async () => {
+      const { data } = await this.advertClient.get('/adv/v0/start', {
+        params: { id: campaignId },
+        headers: { Authorization: this.normalizeAuthHeader(token) },
+      })
+      return data
+    }
+    try {
+      return await this.retryOn429(attempt)
+    } catch (e: any) {
+      const { status, payload } = this.buildWbError(e, 'WB start campaign failed')
+      throw new HttpException(payload, status)
+    }
+  }
+
+  async getAdvertBudget(userId: string, campaignId: number) {
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    const attempt = async () => {
+      const { data } = await this.advertClient.get('/adv/v1/budget', {
+        params: { id: campaignId },
+        headers: { Authorization: this.normalizeAuthHeader(token) },
+      })
+      return data
+    }
+    try {
+      return await this.retryOn429(attempt)
+    } catch (e: any) {
+      const { status, payload } = this.buildWbError(e, 'WB get campaign budget failed')
+      throw new HttpException(payload, status)
+    }
+  }
+
+  async depositAdvertBudget(
+    userId: string,
+    payload: { advertId: number; sum: number; cashbackSum?: number; cashbackPercent?: number },
+  ) {
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    const body: Record<string, any> = {
+      advertId: payload.advertId,
+      sum: payload.sum,
+    }
+    if (payload.cashbackSum != null) body.cashback_sum = payload.cashbackSum
+    if (payload.cashbackPercent != null) body.cashback_percent = payload.cashbackPercent
+    const attempt = async () => {
+      const { data } = await this.advertClient.post('/adv/v1/budget/deposit', body, {
+        headers: { Authorization: token },
+      })
+      return data
+    }
+    try {
+      return await this.retryOn429(attempt)
+    } catch (e: any) {
+      const { status, payload: errorPayload } = this.buildWbError(e, 'WB budget deposit failed')
+      throw new HttpException(errorPayload, status)
+    }
+  }
+
+  async getAdvertFullStats(userId: string, campaignId: number) {
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    const attempt = async () => {
+      const { data } = await this.advertClient.get('/adv/v3/fullstats', {
+        params: { ids: campaignId, beginDate: undefined, endDate: undefined },
+        headers: { Authorization: this.normalizeAuthHeader(token) },
+      })
+      return data
+    }
+    return this.retryOn429(attempt)
+  }
+
+  async getAdvertFullStatsRange(
+    userId: string,
+    params: { ids: number[]; beginDate: string; endDate: string },
+  ) {
+    const ids = Array.isArray(params?.ids) ? params.ids.filter(id => Number.isFinite(Number(id))).map(id => Number(id)) : []
+    if (!ids.length) {
+      throw new BadRequestException('ids must include at least one numeric campaign id')
+    }
+    if (!params?.beginDate || !params?.endDate) {
+      throw new BadRequestException('beginDate and endDate are required')
+    }
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    const attempt = async () => {
+      const { data } = await this.advertClient.get('/adv/v3/fullstats', {
+        params: {
+          ids: ids.join(','),
+          beginDate: params.beginDate,
+          endDate: params.endDate,
+        },
+        headers: { Authorization: this.normalizeAuthHeader(token) },
+      })
+      return data
+    }
+    try {
+      return await this.retryOn429(attempt)
+    } catch (e: any) {
+      const { status, payload } = this.buildWbError(e, 'WB campaign stats request failed')
+      throw new HttpException(payload, status)
+    }
+  }
+
+  // WB Promotion API v0: auction bids update for type=9 campaigns
+  async updateAuctionBids(
+    userId: string,
+    body: { advertId: number; nmId: number; bid: number; placement?: 'search' | 'recommendations' | 'combined' },
+  ) {
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    const attempt = async () => {
+      const { data } = await this.advertClient.patch('/adv/v0/auction/bids', body, {
+        headers: { Authorization: this.normalizeAuthHeader(token) },
+      })
+      return data
+    }
+    try {
+      return await this.retryOn429(attempt)
+    } catch (e: any) {
+      const { status, payload } = this.buildWbError(e, 'WB update auction bids failed')
+      throw new HttpException(payload, status)
+    }
+  }
+
+  // WB Promotion API v0: keywords-level stats (max ~7 days)
+  async getAdvertKeywordsStats(
+    userId: string,
+    params: { advertId: number; dateFrom: string; dateTo?: string },
+  ) {
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    const attempt = async () => {
+      const { data } = await this.advertClient.get('/adv/v0/stats/keywords', {
+        params,
+        headers: { Authorization: this.normalizeAuthHeader(token) },
+      })
+      return data
+    }
+    return this.retryOn429(attempt)
+  }
+
   // Seller Analytics v3: proxy products history exactly like the curl you provided
   async postSellerAnalyticsV3ProductsHistory(userId: string, body: any) {
-    const token = await this.getTokenOrThrow(userId)
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
     try {
       const { data } = await this.sellerAnalyticsClient.post(
         '/api/analytics/v3/sales-funnel/products/history',
@@ -46,7 +429,7 @@ export class WbService {
   // --- Analytics rebuilt on top of Statistics API ---
   // body: { selectedPeriod: {start, end}, nmIds?: number[], ... }
   async postSalesFunnelProducts(userId: string, body: any) {
-    const token = await this.getTokenOrThrow(userId)
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
     const start = body?.selectedPeriod?.start
     if (!start) throw new HttpException({ message: 'selectedPeriod.start is required' }, 400)
     // Pull orders and sales for the period. statistics API requires dateFrom; we fetch from start.
@@ -123,7 +506,7 @@ export class WbService {
 
   // body: { selectedPeriod: {start, end}, nmIds?: number[], aggregationLevel?: 'day'|'week' }
   async postSalesFunnelProductsHistory(userId: string, body: any) {
-    const token = await this.getTokenOrThrow(userId)
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
     const startStr = body?.selectedPeriod?.start
     const endStr = body?.selectedPeriod?.end
     if (!startStr || !endStr) throw new HttpException({ message: 'selectedPeriod.start and end are required' }, 400)
@@ -264,10 +647,20 @@ export class WbService {
   }
 
   private normalizeAuthHeader(rawToken: string): string {
-    // WB usually expects the token directly in Authorization header (without 'Bearer ')
     if (!rawToken) return rawToken
-    if (rawToken.startsWith('Bearer ')) return rawToken.slice(7)
-    return rawToken
+    const token = rawToken.trim()
+    return token.startsWith('Bearer ') ? token : `Bearer ${token}`
+  }
+
+  // Content API token helper: prefer WB_CONTENT_TOKEN from env, then Partner token, then API token
+  private async getTokenForWBContent(userId: string): Promise<string> {
+    const envToken = this.configService.get<string>('WB_CONTENT_TOKEN')
+    if (envToken) return envToken
+    const partnerToken = await this.usersService.getWbPartnerToken(userId)
+    if (partnerToken) return partnerToken
+    const apiToken = await this.usersService.getWbApiToken(userId)
+    if (apiToken) return apiToken
+    throw new BadRequestException('WB Content token is not set for this user/environment')
   }
 
   // Analytics: Sales funnel products
@@ -277,7 +670,7 @@ export class WbService {
     page?: number
     pageSize?: number
   }) {
-    const token = await this.getTokenOrThrow(userId)
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
     const query: Record<string, any> = {}
     if (params?.dateFrom) query.dateFrom = params.dateFrom
     if (params?.dateTo) query.dateTo = params.dateTo
@@ -565,18 +958,46 @@ export class WbService {
 
   // Advert: promotion count / campaigns summary
   async getAdvertPromotionCount(userId: string, query?: Record<string, any>) {
-    const token = await this.getTokenOrThrow(userId)
-    const { data } = await this.advertClient.get('/adv/v1/promotion/count', {
-      params: query ?? {},
-      headers: { Authorization: token },
-    })
-    return data
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
+    try {
+      const headers = { Authorization: this.normalizeAuthHeader(token) }
+      console.debug('[WB][promotion-count][request]', {
+        userId,
+        query: query ?? {},
+        headersMeta: {
+          hasAuthorization: Boolean(headers.Authorization),
+          bearerPrefix: typeof headers.Authorization === 'string' && headers.Authorization.startsWith('Bearer '),
+          tokenLength: typeof headers.Authorization === 'string' ? headers.Authorization.length : 0,
+        },
+      })
+      const { data } = await this.advertClient.get('/adv/v1/promotion/count', {
+        params: query ?? {},
+        headers,
+      })
+      console.debug('[WB][promotion-count][response]', {
+        ok: true,
+        keys: data ? Object.keys(data) : null,
+        advertsCount: Array.isArray((data as any)?.adverts) ? (data as any).adverts.length : null,
+        raw: (data as any)?.title ? undefined : undefined,
+      })
+      return data
+    } catch (e: any) {
+      console.error('[WB][promotion-count][error]', {
+        status: e?.response?.status,
+        statusText: e?.response?.statusText,
+        data: e?.response?.data,
+        headers: e?.response?.headers,
+      })
+      const status = e?.response?.status || 502
+      const message = e?.response?.data?.message || e?.message || 'WB promotion count failed'
+      throw new HttpException({ message, details: e?.response?.data }, status)
+    }
   }
 
   // --- Standard Analytics Report Flow ---
   // Create report
   async createAnalyticsReport(userId: string, body: any) {
-    const token = await this.getTokenOrThrow(userId)
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
     // WB usually expects JSON body describing report type, date range, grouping, etc.
     const { data } = await this.analyticsClient.post('/api/analytics/v1/reports', body, {
       headers: { Authorization: token },
@@ -587,7 +1008,7 @@ export class WbService {
 
   // Poll report status
   async getAnalyticsReportStatus(userId: string, reportId: string) {
-    const token = await this.getTokenOrThrow(userId)
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
     const { data } = await this.analyticsClient.get(`/api/analytics/v1/reports/${encodeURIComponent(reportId)}`, {
       headers: { Authorization: token },
     })
@@ -597,7 +1018,7 @@ export class WbService {
 
   // Download report result
   async downloadAnalyticsReport(userId: string, reportId: string) {
-    const token = await this.getTokenOrThrow(userId)
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
     const { data } = await this.analyticsClient.get(`/api/analytics/v1/reports/${encodeURIComponent(reportId)}/download`, {
       headers: { Authorization: token },
       responseType: 'json',
@@ -607,7 +1028,7 @@ export class WbService {
 
   // --- Content: Set primary image for a product (placeholder; adjust endpoint to your WB API) ---
   async setPrimaryImage(userId: string, params: { nmId: number | string; imageUrl: string }) {
-    const token = await this.getTokenOrThrow(userId)
+    const token = this.normalizeAuthHeader(await this.getTokenOrThrow(userId))
     // NOTE: Replace this with the exact WB Content API endpoint for setting primary image when available.
     // For sandbox, many image operations may be restricted. We simulate success here.
     try {

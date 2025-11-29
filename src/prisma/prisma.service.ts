@@ -11,7 +11,7 @@ type LogDefinition = {
 @Injectable()
 export class PrismaService extends PrismaClient<{ log: LogDefinition[] }> implements OnModuleInit {
   private readonly logger = new Logger(PrismaService.name);
-
+404
   constructor(private configService: ConfigService) {
     super({
       log: [

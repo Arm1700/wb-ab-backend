@@ -143,95 +143,54 @@ export class SeedService {
   }
 
   /**
-   * Генерирует тестовые A/B тесты с вариантами и метриками
+   * Генерирует тестовые A/B тесты РЕКЛАМНЫХ кампаний (AbAd*) без реальных WB кампаний
    */
-  async seedAbTests(count: number = 5) {
+  async seedAbAdsTests(count: number = 5) {
     const products = await this.prisma.product.findMany({
       take: count,
       orderBy: { createdAt: 'desc' },
-      include: { images: true },
     });
 
     if (products.length === 0) {
-      throw new Error('Нет продуктов для создания A/B тестов. Сначала создайте продукты.');
+      throw new Error('Нет продуктов для создания A/B рекламных тестов. Сначала создайте продукты.');
     }
 
-    const abTests = [];
-
+    const tests = [] as any[]
     for (let i = 0; i < Math.min(count, products.length); i++) {
-      const product = products[i];
-      const testName = `A/B Тест #${i + 1} - ${product.name}`;
-      const status = ['running', 'paused', 'finished'][Math.floor(Math.random() * 3)];
-      const threshold = [1000, 1500, 2000, 2500][Math.floor(Math.random() * 4)];
-
-      const abTest = await this.prisma.abTest.create({
+      const product = products[i]
+      const test = await this.prisma.abAdTest.create({
         data: {
           productId: product.id,
-          name: testName,
-          status,
-          threshold,
-        },
-      });
-
-      // Создаем 2-3 варианта для каждого теста
-      const variantCount = Math.floor(Math.random() * 2) + 2;
-      const variantKeys = ['A', 'B', 'C'];
-      const variants = [];
-
-      for (let j = 0; j < variantCount; j++) {
-        const imageUrl = product.images[j % product.images.length]?.url || 
-                        `https://picsum.photos/seed/${product.nmId}-variant-${j}/800/800`;
-        
-        const variant = await this.prisma.abVariant.create({
-          data: {
-            abTestId: abTest.id,
-            imageUrl,
-            variantKey: variantKeys[j],
+          name: `AB-Ads #${i + 1} - ${product.name ?? 'Product'}`,
+          status: 'draft',
+          budget: 1000,
+          variants: {
+            create: [
+              { variantName: 'A', nmIds: [Number(product.nmId)], dailyBudget: 500, status: 'draft' },
+              { variantName: 'B', nmIds: [Number(product.nmId)], dailyBudget: 500, status: 'draft' },
+            ] as any,
           },
-        });
-
-        // Генерируем метрики для каждого варианта за последние 7-14 дней
-        const metricsDays = Math.floor(Math.random() * 8) + 7;
-        const endDate = new Date();
-
-        for (let k = 0; k < metricsDays; k++) {
-          const date = new Date(endDate);
-          date.setDate(date.getDate() - k);
-          date.setHours(0, 0, 0, 0);
-
-          // Вариант B обычно лучше на 10-30%
-          const boost = j === 1 ? 1.2 : 1.0;
-          const impressions = Math.floor((Math.random() * 2000 + 500) * boost);
-          const clicks = Math.floor(impressions * (Math.random() * 0.1 + 0.03) * boost);
-          const orders = Math.floor(clicks * (Math.random() * 0.2 + 0.08) * boost);
-
-          await this.prisma.abVariantMetric.create({
-            data: {
-              variantId: variant.id,
-              date,
-              impressions,
-              clicks,
-              orders,
-            },
-          });
-        }
-
-        variants.push(variant);
+        },
+        include: { variants: true },
+      })
+      // Сгенерируем пару дней статистики как пример
+      const today = new Date(); today.setHours(0,0,0,0)
+      const yest = new Date(today); yest.setDate(today.getDate()-1)
+      for (const v of test.variants) {
+        await this.prisma.abAdStats.createMany({
+          data: [
+            { abAdVariantId: v.id, date: yest, impressions: 1000, clicks: 50, ctr: 5.0, conversions: 5, spend: 400 },
+            { abAdVariantId: v.id, date: today, impressions: 1200, clicks: 72, ctr: 6.0, conversions: 6, spend: 450 },
+          ],
+        })
       }
-
-      abTests.push({ ...abTest, variants });
+      tests.push(test)
     }
 
     return {
-      message: `Создано ${abTests.length} A/B тестов с вариантами и метриками`,
-      abTests: abTests.map(t => ({
-        id: t.id,
-        name: t.name,
-        status: t.status,
-        threshold: t.threshold,
-        variantsCount: t.variants.length,
-      })),
-    };
+      message: `Создано ${tests.length} AB-Ads тестов (черновики) с вариантами и демо-статистикой`,
+      tests: tests.map(t => ({ id: t.id, name: t.name, status: t.status, variantsCount: t.variants.length })),
+    }
   }
 
   /**
@@ -248,19 +207,19 @@ export class SeedService {
 
     const productsResult = await this.seedProducts(productsCount);
     const metricsResult = await this.seedMetrics(metricsDays, productsCount);
-    const abTestsResult = await this.seedAbTests(abTestsCount);
+    const abAdsResult = await this.seedAbAdsTests(abTestsCount);
 
     return {
       message: 'Все тестовые данные успешно созданы',
       summary: {
         products: productsResult.products.length,
         metrics: metricsResult.totalMetrics,
-        abTests: abTestsResult.abTests.length,
+        abAdsTests: abAdsResult.tests.length,
       },
       details: {
         products: productsResult,
         metrics: metricsResult,
-        abTests: abTestsResult,
+        abAdsTests: abAdsResult,
       },
     };
   }
@@ -269,9 +228,9 @@ export class SeedService {
    * Очистка всех тестовых данных
    */
   async clearAll() {
-    await this.prisma.abVariantMetric.deleteMany();
-    await this.prisma.abVariant.deleteMany();
-    await this.prisma.abTest.deleteMany();
+    await this.prisma.abAdStats.deleteMany();
+    await this.prisma.abAdVariant.deleteMany();
+    await this.prisma.abAdTest.deleteMany();
     await this.prisma.productMetric.deleteMany();
     await this.prisma.productImageHistory.deleteMany();
     await this.prisma.productImage.deleteMany();
@@ -289,23 +248,23 @@ export class SeedService {
     const [
       productsCount,
       metricsCount,
-      abTestsCount,
-      variantsCount,
-      variantMetricsCount,
+      abAdsTestsCount,
+      abAdsVariantsCount,
+      abAdsStatsCount,
     ] = await Promise.all([
       this.prisma.product.count(),
       this.prisma.productMetric.count(),
-      this.prisma.abTest.count(),
-      this.prisma.abVariant.count(),
-      this.prisma.abVariantMetric.count(),
+      this.prisma.abAdTest.count(),
+      this.prisma.abAdVariant.count(),
+      this.prisma.abAdStats.count(),
     ]);
 
     return {
       products: productsCount,
       productMetrics: metricsCount,
-      abTests: abTestsCount,
-      abVariants: variantsCount,
-      abVariantMetrics: variantMetricsCount,
+      abAdsTests: abAdsTestsCount,
+      abAdsVariants: abAdsVariantsCount,
+      abAdsStats: abAdsStatsCount,
     };
   }
 }
